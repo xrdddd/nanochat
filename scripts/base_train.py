@@ -408,7 +408,13 @@ while True:
     # use the original uncompiled model because the inputs keep changing shape
     if args.sample_every > 0 and master_process and (last_step or (step > 0 and step % args.sample_every == 0)):
         model.eval()
-        evaluate_sample(orig_model, tokenizer, lambda x:print0(x), True)              
+        evals = []
+        evaluate_sample(orig_model, tokenizer, lambda x:evals.append(x), True, True, lambda x:evals.append(x))    
+        evals_table = wandb.Table(["samples"])
+        for item in evals:
+            evals_table.add_data(item)
+        wandb_run.log({"step" : step, f"samples_step{step}" : evals_table}) 
+        for s in evals: print0(s) 
         model.train()
 
     # save checkpoint: at the end of the run, or every save_every steps, except at the first step or the resume step

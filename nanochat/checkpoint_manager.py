@@ -39,7 +39,20 @@ def _patch_missing_keys(model_data, model_config):
         model_data["x0_lambdas"] = torch.zeros(n_layer)
         log0(f"Patching missing x0_lambdas in model data to 0.0")
 
-def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0):
+def save_checkpoint(checkpoint_dir, step, model_data, optimizer_data, meta_data, rank=0, delete_others=False):
+    if delete_others:
+        # delete the existing ones
+        from pathlib import Path
+        exist_model_path = os.path.join(checkpoint_dir, "model_*.pt")
+        for f in glob.glob(exist_model_path):
+            Path(f).unlink()
+        exist_meta_path = os.path.join(checkpoint_dir, "meta_*.json")
+        for f in glob.glob(exist_meta_path):
+            Path(f).unlink()
+        exist_optim_path = os.path.join(checkpoint_dir, "optim_*.pt")
+        for f in glob.glob(exist_optim_path):
+            Path(f).unlink()
+    
     if rank == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
         # Save the model state parameters

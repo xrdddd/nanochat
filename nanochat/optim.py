@@ -50,6 +50,25 @@ def adamw_step_fused(
     p.add_(exp_avg / denom, alpha=-step_size)
 
 # -----------------------------------------------------------------------------
+
+@torch.compile(dynamic=False, fullgraph=True)
+def lion_step_fused(
+    p: Tensor,              # (32768, 768) - parameter tensor
+    grad: Tensor,           # (32768, 768) - gradient, same shape as p
+    exp_avg: Tensor,        # (32768, 768) - first moment, same shape as p
+    lr_t: Tensor,           # () - 0-D CPU tensor, learning rate
+    beta1_t: Tensor,        # () - 0-D CPU tensor, beta1
+    wd_t: Tensor,           # () - 0-D CPU tensor, weight decay
+) -> None:
+    """
+    Fused Lion step, which can be more memory efficient and save computation. paper ref https://arxiv.org/abs/2302.06675
+    All in one compiled graph to eliminate Python overhead between ops.
+    The 0-D CPU tensors avoid recompilation when hyperparameter values change.
+    """
+    p.mul_(1 - lr_t * wd_t)
+    exp_avg.lerp_(grad, 1 - beta1_t)
+    p += -lr_t * torch.sign(exp_avg)
+
 """
 Muon optimizer adapted and simplified from modded-nanogpt.
 https://github.com/KellerJordan/modded-nanogpt

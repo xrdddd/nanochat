@@ -537,4 +537,4 @@ class GPT(nn.Module):
             yield token
 
 def _no_cla_share(layer_idx: int, window: int):
-    return (0 == (layer_idx // window) % 2)
+    return -1 == window or (0 == (layer_idx // window) % 2)

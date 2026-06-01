@@ -37,6 +37,7 @@ class GPTConfig:
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
+    cla_window: int = -1 # means no cross layers kv sharing with window sliding
 
 
 def norm(x):
@@ -73,12 +74,13 @@ class CausalSelfAttention(nn.Module):
         assert self.n_embd % self.n_head == 0
         assert self.n_kv_head <= self.n_head and self.n_head % self.n_kv_head == 0
         self.c_q = Linear(self.n_embd, self.n_head * self.head_dim, bias=False)
-        if layer_idx < 6:
+        no_cla_share = _no_cla_share(layer_idx, config.cla_window)
+        if no_cla_share:
             self.c_k = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
             self.c_v = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
         self.c_proj = Linear(self.n_embd, self.n_embd, bias=False)
         self.ve_gate_channels = 12
-        if layer_idx < 6:
+        if no_cla_share:
             self.ve_gate = Linear(self.ve_gate_channels, self.n_kv_head, bias=False) if has_ve(layer_idx, config.n_layer) else None
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache, k_last, v_last):
@@ -198,7 +200,7 @@ class GPT(nn.Module):
         # Value embeddings (ResFormer-style): alternating layers, last layer always included
         head_dim = config.n_embd // config.n_head
         kv_dim = config.n_kv_head * head_dim
-        self.value_embeds = nn.ModuleDict({str(i): nn.Embedding(padded_vocab_size, kv_dim) for i in range(config.n_layer) if has_ve(i, config.n_layer) and i < 6})
+        self.value_embeds = nn.ModuleDict({str(i): nn.Embedding(padded_vocab_size, kv_dim) for i in range(config.n_layer) if has_ve(i, config.n_layer) and _no_cla_share(i, self.config.cla_window)})
         # To support meta device initialization, we init the rotary embeddings here, but it's just "fake" meta tensors only.
         # As for rotary_seq_len, these rotary embeddings are pretty small/cheap in memory,
         # so let's just over-compute them by 10X, but assert fail if we ever reach that amount.
@@ -234,7 +236,7 @@ class GPT(nn.Module):
         s = 3**0.5 * n_embd**-0.5 # sqrt(3) multiplier makes sure Uniform achieves the same std as Normal
         for i, block in enumerate(self.transformer.h):
             torch.nn.init.uniform_(block.attn.c_q.weight, -s, s) # weights use Uniform to avoid outliers
-            if i < 6:
+            if _no_cla_share(i, self.config.cla_window):
                 torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
                 torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
             torch.nn.init.zeros_(block.attn.c_proj.weight) # projections are zero
@@ -261,7 +263,7 @@ class GPT(nn.Module):
 
         # Gate weights init with small positive values so gates start slightly above neutral
         for i, block in enumerate(self.transformer.h):
-            if i < 6 and block.attn.ve_gate is not None:
+            if _no_cla_share(i, self.config.cla_window) and block.attn.ve_gate is not None:
                 torch.nn.init.uniform_(block.attn.ve_gate.weight, 0.0, 0.02)
 
         # Rotary embeddings
@@ -476,7 +478,7 @@ class GPT(nn.Module):
                 k_last = k_shared[i - 6]
                 v_last = v_shared[i - 6]
             x, k, v = block(x, ve, cos_sin, self.window_sizes[i], kv_cache, k_last, v_last)
-            if(i < 6):
+            if _no_cla_share(i, self.config.cla_window):
                 k_shared.append(k)
                 v_shared.append(v)
 
@@ -533,3 +535,6 @@ class GPT(nn.Module):
             ids = torch.cat((ids, next_ids), dim=1)
             token = next_ids.item()
             yield token
+
+def _no_cla_share(layer_idx: int, window: int):
+    return (0 == (layer_idx // window) % 2)

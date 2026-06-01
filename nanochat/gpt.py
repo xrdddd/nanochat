@@ -467,8 +467,8 @@ class GPT(nn.Module):
         n_layer = self.config.n_layer
         backout_layer = n_layer // 2  # cache at halfway point
         x_backout = None
-        k_shared = []
-        v_shared = []
+        k_shared = {}
+        v_shared = {}
         for i, block in enumerate(self.transformer.h):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None  
@@ -478,9 +478,9 @@ class GPT(nn.Module):
                 k_last = k_shared[i - self.config.cla_window]
                 v_last = v_shared[i - self.config.cla_window]
             x, k, v = block(x, ve, cos_sin, self.window_sizes[i], kv_cache, k_last, v_last)
-            if _no_cla_share(i, self.config.cla_window):
-                k_shared.append(k)
-                v_shared.append(v)
+            if -1 != self.config.cla_window and _no_cla_share(i, self.config.cla_window):
+                k_shared[i] = k
+                v_shared[i] = v
 
             if i == backout_layer:
                 x_backout = x

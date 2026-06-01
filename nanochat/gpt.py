@@ -474,7 +474,7 @@ class GPT(nn.Module):
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None  
             k_last = None
             v_last = None
-            if(i >= 6):
+            if not _no_cla_share(i, self.config.cla_window):
                 k_last = k_shared[i - 6]
                 v_last = v_shared[i - 6]
             x, k, v = block(x, ve, cos_sin, self.window_sizes[i], kv_cache, k_last, v_last)

@@ -475,8 +475,8 @@ class GPT(nn.Module):
             k_last = None
             v_last = None
             if not _no_cla_share(i, self.config.cla_window):
-                k_last = k_shared[i - 6]
-                v_last = v_shared[i - 6]
+                k_last = k_shared[i - self.config.cla_window]
+                v_last = v_shared[i - self.config.cla_window]
             x, k, v = block(x, ve, cos_sin, self.window_sizes[i], kv_cache, k_last, v_last)
             if _no_cla_share(i, self.config.cla_window):
                 k_shared.append(k)

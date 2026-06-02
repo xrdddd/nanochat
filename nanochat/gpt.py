@@ -101,8 +101,8 @@ class CausalSelfAttention(nn.Module):
         q = q * 1.2  # sharper attention (split scale between Q and K), TODO think through better
 
         if k_last is not None and v_last is not None:
-            k = k_last + self.c_k_lb(self.c_k_la(x))
-            v = v_last + self.c_v_lb(self.c_v_la(x))
+            k = k_last + self.c_k_lb(self.c_k_la(x)).view(B, T, self.n_kv_head, self.head_dim)
+            v = v_last + self.c_v_lb(self.c_v_la(x)).view(B, T, self.n_kv_head, self.head_dim)
         else:
             k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
             v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)

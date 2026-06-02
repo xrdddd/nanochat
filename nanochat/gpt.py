@@ -80,10 +80,10 @@ class CausalSelfAttention(nn.Module):
             self.c_k = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
             self.c_v = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
         else:
-            self.c_k_la = Linear(self.n_embd, min_dim//2)
-            self.c_k_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim)
-            self.c_v_la = Linear(self.n_embd, min_dim//2)
-            self.c_v_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim)             
+            self.c_k_la = Linear(self.n_embd, min_dim//2, bias=False)
+            self.c_k_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim, bias=False)
+            self.c_v_la = Linear(self.n_embd, min_dim//2, bias=False)
+            self.c_v_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim, bias=False)             
         self.c_proj = Linear(self.n_embd, self.n_embd, bias=False)
         self.ve_gate_channels = 12
         if no_cla_share:

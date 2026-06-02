@@ -75,15 +75,9 @@ class CausalSelfAttention(nn.Module):
         assert self.n_kv_head <= self.n_head and self.n_head % self.n_kv_head == 0
         self.c_q = Linear(self.n_embd, self.n_head * self.head_dim, bias=False)
         no_cla_share = _no_cla_share(layer_idx, config.cla_window)
-        min_dim = self.n_kv_head * self.head_dim # let's assume
         if no_cla_share:
             self.c_k = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
-            self.c_v = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)
-        else:
-            self.c_k_la = Linear(self.n_embd, min_dim//2, bias=False)
-            self.c_k_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim, bias=False)
-            self.c_v_la = Linear(self.n_embd, min_dim//2, bias=False)
-            self.c_v_lb = Linear(min_dim//2, self.n_kv_head * self.head_dim, bias=False)             
+            self.c_v = Linear(self.n_embd, self.n_kv_head * self.head_dim, bias=False)          
         self.c_proj = Linear(self.n_embd, self.n_embd, bias=False)
         self.ve_gate_channels = 12
         if no_cla_share:
@@ -101,8 +95,8 @@ class CausalSelfAttention(nn.Module):
         q = q * 1.2  # sharper attention (split scale between Q and K), TODO think through better
 
         if k_last is not None and v_last is not None:
-            k = k_last + self.c_k_lb(self.c_k_la(x)).view(B, T, self.n_kv_head, self.head_dim)
-            v = v_last + self.c_v_lb(self.c_v_la(x)).view(B, T, self.n_kv_head, self.head_dim)
+            k = k_last
+            v = v_last
         else:
             k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
             v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)
@@ -245,11 +239,6 @@ class GPT(nn.Module):
             if _no_cla_share(i, self.config.cla_window):
                 torch.nn.init.uniform_(block.attn.c_k.weight, -s, s)
                 torch.nn.init.uniform_(block.attn.c_v.weight, -s, s)
-            else:
-                torch.nn.init.uniform_(block.attn.c_k_la.weight, -s, s)
-                torch.nn.init.uniform_(block.attn.c_k_lb.weight, -s, s)
-                torch.nn.init.uniform_(block.attn.c_v_la.weight, -s, s)
-                torch.nn.init.uniform_(block.attn.c_v_lb.weight, -s, s)
             torch.nn.init.zeros_(block.attn.c_proj.weight) # projections are zero
             torch.nn.init.uniform_(block.mlp.c_fc.weight, -s * 0.4, s * 0.4)  # 0.4x init scale for c_fc
             torch.nn.init.zeros_(block.mlp.c_proj.weight)
